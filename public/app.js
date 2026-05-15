@@ -7,19 +7,30 @@ const compareBtn = document.getElementById("compare-btn");
 const statusEl = document.getElementById("status");
 const resultsEl = document.getElementById("results");
 
-// { slotId -> { unitid, name } }
-const selected = {};
+let ALL_SCHOOLS = [];
 let slotCount = 0;
+const selected = {}; // slotId -> {unitid, name}
+
+fetch("/schools.json")
+  .then(r => r.json())
+  .then(data => { ALL_SCHOOLS = data; })
+  .catch(() => { statusEl.textContent = "Could not load school list."; });
+
+function searchSchools(q) {
+  const lq = q.toLowerCase();
+  return ALL_SCHOOLS.filter(s => s.name.toLowerCase().includes(lq)).slice(0, 12);
+}
 
 function createSlot() {
   if (slotCount >= MAX_SLOTS) return;
   const id = ++slotCount;
+
   const wrap = document.createElement("div");
   wrap.className = "slot";
   wrap.dataset.slot = id;
   wrap.innerHTML = `
     <div class="slot-wrap">
-      <input type="text" placeholder="Search for a school…" autocomplete="off" data-slot="${id}" />
+      <input type="text" placeholder="Search for a school…" autocomplete="off" />
       <div class="dropdown" id="dd-${id}" style="display:none"></div>
     </div>`;
   slotsEl.appendChild(wrap);
@@ -33,38 +44,31 @@ function createSlot() {
     clearTimeout(debounce);
     if (selected[id]) { delete selected[id]; updateCompareBtn(); }
     if (q.length < 2) { dd.style.display = "none"; return; }
-    debounce = setTimeout(() => search(q, id, input, dd), 300);
+    debounce = setTimeout(() => {
+      const results = searchSchools(q);
+      if (!results.length) { dd.style.display = "none"; return; }
+      dd.innerHTML = results.map(s =>
+        `<div class="dropdown-item" data-unitid="${s.unitid}" data-name="${s.name}">
+          ${s.name}
+          <div class="sub">${s.city}, ${s.state}</div>
+        </div>`
+      ).join("");
+      dd.style.display = "block";
+      dd.querySelectorAll(".dropdown-item").forEach(item => {
+        item.addEventListener("mousedown", () => {
+          selected[id] = { unitid: item.dataset.unitid, name: item.dataset.name };
+          input.value = item.dataset.name;
+          dd.style.display = "none";
+          updateCompareBtn();
+        });
+      });
+    }, 150);
   });
 
   input.addEventListener("blur", () => setTimeout(() => dd.style.display = "none", 150));
 
   if (slotCount >= MAX_SLOTS) addBtn.style.display = "none";
   updateCompareBtn();
-}
-
-async function search(q, slotId, input, dd) {
-  try {
-    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
-    const items = await res.json();
-    if (!Array.isArray(items) || items.length === 0) { dd.style.display = "none"; return; }
-    dd.innerHTML = items.map(s =>
-      `<div class="dropdown-item" data-unitid="${s.unitid}" data-name="${s.name}">
-        ${s.name}
-        <div class="sub">${s.city}, ${s.state}</div>
-      </div>`
-    ).join("");
-    dd.style.display = "block";
-    dd.querySelectorAll(".dropdown-item").forEach(item => {
-      item.addEventListener("mousedown", () => {
-        selected[slotId] = { unitid: item.dataset.unitid, name: item.dataset.name };
-        input.value = item.dataset.name;
-        dd.style.display = "none";
-        updateCompareBtn();
-      });
-    });
-  } catch {
-    dd.style.display = "none";
-  }
 }
 
 function updateCompareBtn() {
@@ -77,7 +81,7 @@ addBtn.addEventListener("click", createSlot);
 
 compareBtn.addEventListener("click", async () => {
   const unitids = Object.values(selected).map(s => s.unitid);
-  statusEl.textContent = "Fetching data…";
+  statusEl.textContent = "Fetching IPEDS data…";
   compareBtn.disabled = true;
   resultsEl.innerHTML = "";
 
@@ -90,7 +94,7 @@ compareBtn.addEventListener("click", async () => {
   } catch (err) {
     statusEl.textContent = `Error: ${err.message}`;
   } finally {
-    compareBtn.disabled = Object.keys(selected).length < MIN_SLOTS;
+    updateCompareBtn();
   }
 });
 
@@ -100,7 +104,10 @@ function badgeClass(sim) {
 
 function fmt(v) {
   if (v === null || v === undefined) return "—";
-  if (typeof v === "number") return v.toLocaleString();
+  if (typeof v === "number") {
+    if (v > 0 && v < 1) return (v * 100).toFixed(1) + "%";
+    return v.toLocaleString();
+  }
   return v;
 }
 
@@ -130,6 +137,5 @@ function render(data) {
     </div>`).join("");
 }
 
-// Start with 2 slots
 createSlot();
 createSlot();

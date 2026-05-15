@@ -1,6 +1,7 @@
 """
-Fetch numerical characteristics for a single institution from IPEDS.
-Caches results in /tmp keyed by unitid.
+Fetch and cache numerical characteristics for a single institution from IPEDS.
+Uses Urban Institute Education Data Portal API.
+Cache stored in /tmp/school_cache/<unitid>.json.
 """
 import json
 import os
@@ -10,95 +11,98 @@ from http.server import BaseHTTPRequestHandler
 
 CACHE_DIR = "/tmp/school_cache"
 
-ENDPOINTS = {
-    "admissions": "https://educationdata.urban.org/api/v1/college-university/ipeds/admissions-requirements/2023/?unitid={unitid}&fields=unitid,applcn,admssn,enrlt,satvr25,satvr75,satmt25,satmt75,actcm25,actcm75",
-    "enrollment": "https://educationdata.urban.org/api/v1/college-university/ipeds/fall-enrollment/2023/?unitid={unitid}&fields=unitid,efytotlt,efytotlm,efytotlw",
-    "graduation": "https://educationdata.urban.org/api/v1/college-university/ipeds/grad-rates/2023/?unitid={unitid}&fields=unitid,grtotlt,grtotlm,grtotlw",
-    "finance": "https://educationdata.urban.org/api/v1/college-university/ipeds/student-financial-aid/2023/?unitid={unitid}&fields=unitid,scugffn,scugffp,anyaidp,fedloanp",
-    "characteristics": "https://educationdata.urban.org/api/v1/college-university/ipeds/institutional-characteristics/2023/?unitid={unitid}&fields=unitid,inst_name,city,state_abbr,sector,hbcu,tribal,longitud,latitude,tuition1,tuition2,tuition3,tuition4,roomboard,fte12mn",
-}
-
-FIELD_LABELS = {
-    "applcn": "Applications received",
-    "admssn": "Admissions",
-    "enrlt": "Enrolled (full-time first-time)",
-    "satvr25": "SAT verbal 25th pct",
-    "satvr75": "SAT verbal 75th pct",
-    "satmt25": "SAT math 25th pct",
-    "satmt75": "SAT math 75th pct",
-    "actcm25": "ACT composite 25th pct",
-    "actcm75": "ACT composite 75th pct",
-    "efytotlt": "Total enrollment",
-    "efytotlm": "Total enrollment (men)",
-    "efytotlw": "Total enrollment (women)",
-    "grtotlt": "6-yr graduation rate (total)",
-    "grtotlm": "6-yr graduation rate (men)",
-    "grtotlw": "6-yr graduation rate (women)",
-    "scugffn": "Students receiving aid (n)",
-    "scugffp": "Students receiving aid (%)",
-    "anyaidp": "Any financial aid (%)",
-    "fedloanp": "Federal loan (%)",
-    "tuition1": "Tuition in-district",
-    "tuition2": "Tuition in-state",
-    "tuition3": "Tuition out-of-state",
-    "tuition4": "Tuition out-of-state (2)",
-    "roomboard": "Room & board",
-    "fte12mn": "FTE enrollment (12-month)",
-    "longitud": "Longitude",
-    "latitude": "Latitude",
-}
+BASE = "https://educationdata.urban.org/api/v1/college-university/ipeds"
 
 
-def _fetch_endpoint(url: str) -> dict:
+def _get(url: str) -> list[dict]:
     with urllib.request.urlopen(url, timeout=10) as resp:
-        data = json.loads(resp.read())
-    results = data.get("results", [])
-    return results[0] if results else {}
+        return json.loads(resp.read()).get("results", [])
 
 
 def _fetch_school(unitid: str) -> dict:
-    cache_path = os.path.join(CACHE_DIR, f"{unitid}.json")
     os.makedirs(CACHE_DIR, exist_ok=True)
-
+    cache_path = os.path.join(CACHE_DIR, f"{unitid}.json")
     if os.path.exists(cache_path):
         with open(cache_path) as f:
             return json.load(f)
 
-    merged = {}
-    for key, url_template in ENDPOINTS.items():
-        url = url_template.format(unitid=unitid)
-        try:
-            record = _fetch_endpoint(url)
-            merged.update(record)
-        except Exception:
-            pass
+    out = {"unitid": int(unitid)}
 
-    # Keep only numerical fields plus identifiers
-    NON_NUMERIC = {"unitid", "inst_name", "city", "state_abbr", "sector", "hbcu", "tribal"}
-    numerics = {
-        k: v for k, v in merged.items()
-        if k in NON_NUMERIC or (isinstance(v, (int, float)) and v is not None)
-    }
-    numerics["_labels"] = {k: FIELD_LABELS.get(k, k) for k in numerics if k not in NON_NUMERIC and k != "_labels"}
+    # Identity
+    rows = _get(f"{BASE}/directory/2023/?unitid={unitid}")
+    if rows:
+        r = rows[0]
+        out.update({
+            "inst_name": r.get("inst_name"),
+            "city": r.get("city"),
+            "state": r.get("state_abbr"),
+            "sector": r.get("sector"),
+            "hbcu": r.get("hbcu"),
+            "tribal": r.get("tribal_college"),
+        })
+
+    # Admissions (total row = sex 99)
+    rows = _get(f"{BASE}/admissions-enrollment/2022/?unitid={unitid}")
+    total = next((r for r in rows if r.get("sex") == 99), None)
+    if total:
+        applied = total.get("number_applied") or 0
+        admitted = total.get("number_admitted") or 0
+        out["applications"] = applied
+        out["admissions"] = admitted
+        out["admit_rate"] = round(admitted / applied, 4) if applied else None
+        out["enrolled_ft"] = total.get("number_enrolled_ft")
+        out["enrolled_total"] = total.get("number_enrolled_total")
+
+    # Tuition (level_of_study=1 = undergraduate)
+    rows = _get(f"{BASE}/academic-year-tuition/2021/?unitid={unitid}&level_of_study=1")
+    for r in rows:
+        t = r.get("tuition_type")
+        if t == 2:
+            out["tuition_in_state"] = r.get("tuition_fees_published")
+        elif t == 3:
+            out["tuition_out_of_state"] = r.get("tuition_fees_published")
+        elif t == 5:
+            out["room_board"] = r.get("tuition_fees_published")
+
+    # Graduation rate (subcohort=2: first-time full-time bachelor's seeking)
+    rows = _get(f"{BASE}/grad-rates/2022/?unitid={unitid}&subcohort=2&race=99&sex=99")
+    grad = next((r for r in rows if r.get("completion_rate_150pct") is not None), None)
+    if grad:
+        out["grad_rate_6yr"] = grad.get("completion_rate_150pct")
+        out["grad_cohort_size"] = grad.get("cohort_adj_150pct")
 
     with open(cache_path, "w") as f:
-        json.dump(numerics, f)
+        json.dump(out, f)
+    return out
 
-    return numerics
+
+FIELD_LABELS = {
+    "applications": "Applications received",
+    "admissions": "Students admitted",
+    "admit_rate": "Admission rate",
+    "enrolled_ft": "Enrolled full-time",
+    "enrolled_total": "Enrolled (total)",
+    "tuition_in_state": "Tuition & fees (in-state)",
+    "tuition_out_of_state": "Tuition & fees (out-of-state)",
+    "room_board": "Room & board",
+    "grad_rate_6yr": "6-year graduation rate",
+    "grad_cohort_size": "Graduation cohort size",
+    "hbcu": "HBCU",
+    "tribal": "Tribal college",
+    "sector": "Sector",
+}
 
 
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        params = urllib.parse.parse_qs(parsed.query)
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
         unitid = params.get("unitid", [""])[0].strip()
-
         if not unitid:
-            self._respond(400, {"error": "unitid parameter required"})
+            self._respond(400, {"error": "unitid required"})
             return
-
         try:
             data = _fetch_school(unitid)
+            data["_labels"] = FIELD_LABELS
             self._respond(200, data)
         except Exception as exc:
             self._respond(500, {"error": str(exc)})
