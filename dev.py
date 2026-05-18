@@ -12,7 +12,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "api"))
 from school import _fetch_school, FIELD_LABELS
 from compare import _fetch_school as _cs, _compare_pair  # reuse same cache
 
-PUBLIC = Path(__file__).parent / "public"
+PUBLIC = Path(__file__).parent
 PORT = int(os.environ.get("PORT", 3000))
 
 
