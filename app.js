@@ -13,7 +13,10 @@ const selected = {}; // slotId -> {unitid, name}
 
 fetch("/schools.json")
   .then(r => r.json())
-  .then(data => { ALL_SCHOOLS = data; })
+  .then(data => {
+    ALL_SCHOOLS = data;
+    autoLoadFromURL();
+  })
   .catch(() => { statusEl.textContent = "Could not load school list."; });
 
 function searchSchools(q) {
@@ -79,12 +82,12 @@ function updateCompareBtn() {
 
 addBtn.addEventListener("click", createSlot);
 
-compareBtn.addEventListener("click", async () => {
+async function runComparison() {
   const unitids = Object.values(selected).map(s => s.unitid);
-  statusEl.textContent = "Fetching IPEDS data…";
+  history.pushState(null, "", "?unitids=" + unitids.join(","));
+  statusEl.textContent = "Loading…";
   compareBtn.disabled = true;
   resultsEl.innerHTML = "";
-
   try {
     const res = await fetch(`/api/compare?unitids=${unitids.join(",")}`);
     const data = await res.json();
@@ -96,7 +99,34 @@ compareBtn.addEventListener("click", async () => {
   } finally {
     updateCompareBtn();
   }
-});
+}
+
+function autoLoadFromURL() {
+  const params = new URLSearchParams(location.search);
+  const raw = params.get("unitids");
+  if (!raw) return;
+  const unitids = raw.split(",").map(s => s.trim()).filter(Boolean).slice(0, MAX_SLOTS);
+  if (unitids.length < MIN_SLOTS) return;
+
+  const byUnitid = Object.fromEntries(ALL_SCHOOLS.map(s => [String(s.unitid), s]));
+
+  // Add extra slots if needed
+  while (slotCount < unitids.length) createSlot();
+
+  unitids.forEach((uid, i) => {
+    const school = byUnitid[uid];
+    if (!school) return;
+    const slotId = i + 1;
+    selected[slotId] = { unitid: uid, name: school.name };
+    const input = slotsEl.querySelector(`div[data-slot="${slotId}"] input`);
+    if (input) input.value = school.name;
+  });
+
+  updateCompareBtn();
+  runComparison();
+}
+
+compareBtn.addEventListener("click", runComparison);
 
 const GROUPS = [
   { heading: "Admits and Graduation", fields: ["admission_rate", "yield_rate", "grad_rate_6yr"] },
