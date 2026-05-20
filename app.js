@@ -168,16 +168,20 @@ function renderPairRows(comparisons) {
   }).join("");
 }
 
+function ncesLink(school) {
+  return `<a href="https://nces.ed.gov/collegenavigator/?id=${school.unitid}" target="_blank" rel="noopener">${school.name}</a>`;
+}
+
 function render(data) {
   resultsEl.innerHTML = data.pairs.map(pair => `
     <div class="pair-section">
-      <h2>${pair.school_a.name} vs. ${pair.school_b.name}</h2>
+      <h2>${ncesLink(pair.school_a)} vs. ${ncesLink(pair.school_b)}</h2>
       <table>
         <thead>
           <tr>
             <th>Characteristic</th>
-            <th>${pair.school_a.name}</th>
-            <th>${pair.school_b.name}</th>
+            <th>${ncesLink(pair.school_a)}</th>
+            <th>${ncesLink(pair.school_b)}</th>
             <th>Similarity</th>
           </tr>
         </thead>
