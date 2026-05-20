@@ -98,6 +98,14 @@ compareBtn.addEventListener("click", async () => {
   }
 });
 
+const GROUPS = [
+  { heading: "Admits and Graduation", fields: ["admission_rate", "yield_rate", "grad_rate_6yr"] },
+  { heading: "Academics",             fields: ["act_avg", "sat_avg"] },
+  { heading: "Enrollment",            fields: ["enrollment_total", "enrollment_ug"] },
+  { heading: "Student characteristics", fields: ["pct_federal_loan", "pct_white", "pct_women"] },
+  { heading: "Money",                 fields: ["grad_debt_median", "net_price", "tuition_in_state", "tuition_out_of_state"] },
+];
+
 function badgeClass(sim) {
   return "badge badge-" + sim.replace(/ /g, "_");
 }
@@ -109,6 +117,25 @@ function fmt(v) {
     return v.toLocaleString();
   }
   return v;
+}
+
+function renderPairRows(comparisons) {
+  const byField = Object.fromEntries(comparisons.map(c => [c.field, c]));
+  return GROUPS.map(group => {
+    const rows = group.fields
+      .map(f => byField[f])
+      .filter(Boolean)
+      .map(c => `
+        <tr>
+          <td>${c.label}</td>
+          <td>${fmt(c.a)}</td>
+          <td>${fmt(c.b)}</td>
+          <td><span class="${badgeClass(c.similarity)}">${c.similarity}</span></td>
+        </tr>`)
+      .join("");
+    if (!rows) return "";
+    return `<tr class="group-header"><td colspan="4">${group.heading}</td></tr>${rows}`;
+  }).join("");
 }
 
 function render(data) {
@@ -125,13 +152,7 @@ function render(data) {
           </tr>
         </thead>
         <tbody>
-          ${pair.comparisons.map(c => `
-            <tr>
-              <td>${c.label}</td>
-              <td>${fmt(c.a)}</td>
-              <td>${fmt(c.b)}</td>
-              <td><span class="${badgeClass(c.similarity)}">${c.similarity}</span></td>
-            </tr>`).join("")}
+          ${renderPairRows(pair.comparisons)}
         </tbody>
       </table>
     </div>`).join("");
