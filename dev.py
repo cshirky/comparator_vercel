@@ -9,8 +9,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "api"))
-from school import _fetch_school, FIELD_LABELS
-from compare import _fetch_school as _cs, _compare_pair  # reuse same cache
+from _school_data import fetch_school, FIELD_LABELS
+from compare import _compare_pair
 
 PUBLIC = Path(__file__).parent
 PORT = int(os.environ.get("PORT", 3000))
@@ -34,7 +34,7 @@ class DevServer(BaseHTTPRequestHandler):
         if not unitid:
             return self._json(400, {"error": "unitid required"})
         try:
-            data = _fetch_school(unitid)
+            data = fetch_school(unitid)
             data["_labels"] = FIELD_LABELS
             self._json(200, data)
         except Exception as exc:
@@ -46,7 +46,7 @@ class DevServer(BaseHTTPRequestHandler):
         if not (2 <= len(unitids) <= 5):
             return self._json(400, {"error": "Provide 2–5 unitids"})
         try:
-            schools = {uid: _fetch_school(uid) for uid in unitids}
+            schools = {uid: fetch_school(uid) for uid in unitids}
         except Exception as exc:
             return self._json(500, {"error": str(exc)})
         pairs = [

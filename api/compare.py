@@ -1,7 +1,3 @@
-"""
-Compare up to 5 schools pairwise across all numerical IPEDS fields.
-Similarity buckets: identical | very similar | similar | different | very different | order of magnitude
-"""
 import json
 import os
 import sys
@@ -9,7 +5,7 @@ import urllib.parse
 from http.server import BaseHTTPRequestHandler
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from school import _fetch_school, FIELD_LABELS
+from _school_data import fetch_school, FIELD_LABELS
 
 IDENTITY_KEYS = {"unitid", "inst_name", "city", "state", "sector", "hbcu", "tribal", "_labels"}
 
@@ -59,14 +55,12 @@ class handler(BaseHTTPRequestHandler):
         unitids = [u.strip() for u in raw.split(",") if u.strip()]
 
         if not (2 <= len(unitids) <= 5):
-            self._respond(400, {"error": "Provide 2–5 unitids"})
-            return
+            return self._json(400, {"error": "Provide 2–5 unitids"})
 
         try:
-            schools = {uid: _fetch_school(uid) for uid in unitids}
+            schools = {uid: fetch_school(uid) for uid in unitids}
         except Exception as exc:
-            self._respond(500, {"error": str(exc)})
-            return
+            return self._json(500, {"error": str(exc)})
 
         pairs = [
             {
@@ -77,10 +71,9 @@ class handler(BaseHTTPRequestHandler):
             for i, a in enumerate(unitids)
             for b in unitids[i + 1:]
         ]
+        self._json(200, {"schools": list(schools.values()), "pairs": pairs})
 
-        self._respond(200, {"schools": list(schools.values()), "pairs": pairs})
-
-    def _respond(self, status: int, body):
+    def _json(self, status, body):
         payload = json.dumps(body).encode()
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
