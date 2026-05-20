@@ -36,6 +36,11 @@ FIELD_LABELS = {
     "sat_avg":             "SAT average",
     "act_avg":             "ACT average",
     "yield_rate":          "Yield rate",
+    "ug_pct_parttime":     "% undergrads part-time",
+    "ug_pct_age_24_under": "% undergrads age 24 and under",
+    "ug_pct_instate":      "% undergrads in-state",
+    "ug_pct_foreign":      "% undergrads from foreign countries",
+    "ug_pct_distance":     "% undergrads distance-only enrollment",
 }
 
 

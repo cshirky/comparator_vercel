@@ -133,7 +133,7 @@ const GROUPS = [
   { heading: "Academics",             fields: ["act_avg", "sat_avg"] },
   { heading: "Enrollment",            fields: ["enrollment_total", "enrollment_ug"] },
   { heading: "Student characteristics", fields: ["pct_federal_loan", "pct_white", "pct_women"] },
-  { heading: "Enrollment characteristics", fields: ["ug_pct_parttime", "ug_pct_instate", "ug_pct_foreign", "ug_pct_distance"] },
+  { heading: "Enrollment characteristics", fields: ["ug_pct_parttime", "ug_pct_age_24_under", "ug_pct_instate", "ug_pct_foreign", "ug_pct_distance"] },
   { heading: "Money",                 fields: ["grad_debt_median", "net_price", "tuition_in_state", "tuition_out_of_state"] },
 ];
 
