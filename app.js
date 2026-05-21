@@ -173,8 +173,25 @@ function ncesLink(school) {
   return `<a href="https://nces.ed.gov/collegenavigator/?id=${school.unitid}" target="_blank" rel="noopener">${school.name}</a>`;
 }
 
+function renderPrograms(school) {
+  if (!school.top_programs || !school.top_programs.length) return "";
+  const rows = school.top_programs.map(p =>
+    `<li>${p.label} <span class="prog-n">${p.n.toLocaleString()}</span></li>`
+  ).join("");
+  return `
+    <div class="programs-card">
+      <div class="programs-name">${ncesLink(school)}</div>
+      <div class="programs-label">Top bachelor's degrees conferred</div>
+      <ol>${rows}</ol>
+    </div>`;
+}
+
 function render(data) {
-  resultsEl.innerHTML = data.pairs.map(pair => `
+  const programsHtml = data.schools.length
+    ? `<div class="programs-row">${data.schools.map(renderPrograms).join("")}</div>`
+    : "";
+
+  const pairsHtml = data.pairs.map(pair => `
     <div class="pair-section">
       <h2>${ncesLink(pair.school_a)} vs. ${ncesLink(pair.school_b)}</h2>
       <table>
@@ -191,6 +208,8 @@ function render(data) {
         </tbody>
       </table>
     </div>`).join("");
+
+  resultsEl.innerHTML = programsHtml + pairsHtml;
 }
 
 createSlot();

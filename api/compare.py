@@ -7,6 +7,17 @@ from http.server import BaseHTTPRequestHandler
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _school_data import fetch_school, FIELD_LABELS
 
+_PROGRAMS_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "programs.json")
+_PROGRAMS: dict | None = None
+
+
+def _programs_db() -> dict:
+    global _PROGRAMS
+    if _PROGRAMS is None:
+        with open(_PROGRAMS_PATH) as f:
+            _PROGRAMS = json.load(f)
+    return _PROGRAMS
+
 IDENTITY_KEYS = {"unitid", "inst_name", "city", "state", "sector", "hbcu", "tribal", "_labels"}
 
 BUCKETS = [
@@ -62,6 +73,13 @@ class handler(BaseHTTPRequestHandler):
         except Exception as exc:
             return self._json(500, {"error": str(exc)})
 
+        progs = _programs_db()
+        schools_out = []
+        for uid, school in schools.items():
+            entry = {"unitid": uid, "name": school.get("inst_name", uid)}
+            entry["top_programs"] = progs.get(uid, [])
+            schools_out.append(entry)
+
         pairs = [
             {
                 "school_a": {"unitid": a, "name": schools[a].get("inst_name", a)},
@@ -71,7 +89,7 @@ class handler(BaseHTTPRequestHandler):
             for i, a in enumerate(unitids)
             for b in unitids[i + 1:]
         ]
-        self._json(200, {"schools": list(schools.values()), "pairs": pairs})
+        self._json(200, {"schools": schools_out, "pairs": pairs})
 
     def _json(self, status, body):
         payload = json.dumps(body).encode()

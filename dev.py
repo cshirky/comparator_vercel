@@ -10,7 +10,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "api"))
 from _school_data import fetch_school, FIELD_LABELS
-from compare import _compare_pair
+from compare import _compare_pair, _programs_db
 
 PUBLIC = Path(__file__).parent
 PORT = int(os.environ.get("PORT", 3000))
@@ -49,6 +49,12 @@ class DevServer(BaseHTTPRequestHandler):
             schools = {uid: fetch_school(uid) for uid in unitids}
         except Exception as exc:
             return self._json(500, {"error": str(exc)})
+        progs = _programs_db()
+        schools_out = []
+        for uid, school in schools.items():
+            entry = {"unitid": uid, "name": school.get("inst_name", uid)}
+            entry["top_programs"] = progs.get(uid, [])
+            schools_out.append(entry)
         pairs = [
             {
                 "school_a": {"unitid": a, "name": schools[a].get("inst_name", a)},
@@ -58,7 +64,7 @@ class DevServer(BaseHTTPRequestHandler):
             for i, a in enumerate(unitids)
             for b in unitids[i + 1:]
         ]
-        self._json(200, {"schools": list(schools.values()), "pairs": pairs})
+        self._json(200, {"schools": schools_out, "pairs": pairs})
 
     def _json(self, status, body):
         payload = json.dumps(body).encode()
